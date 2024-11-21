@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Gastos</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      padding: 0;
+      line-height: 1.6;
+    }
+    form {
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    select, input[type="text"], input[type="number"], button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #007BFF;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .hidden {
+      display: none;
+    }
+    .totals {
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      text-align: center;
+    }
+    .totals div {
+      margin: 10px 0;
+    }
+    .movements {
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .movements h3 {
+      margin-top: 0;
+    }
+    .download, .upload {
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gestor de Gastos</h1>
+  <form id="expense-form">
+    <label for="payment-method">Método de Pago</label>
+    <select id="payment-method" required>
+      <option value="cash">Efectivo</option>
+      <option value="transfer">Transferencia</option>
+    </select>
+
+    <div id="account-options" class="hidden">
+      <label for="account">Cuenta</label>
+      <select id="account">
+        <option value="brubank">Brubank</option>
+        <option value="nx">NX</option>
+        <option value="prex">Prex</option>
+        <option value="uala">Ualá</option>
+        <option value="mp">MercadoPago</option>
+        <option value="other">Otra</option>
+      </select>
+    </div>
+
+    <label for="currency">Moneda</label>
+    <select id="currency" required>
+      <option value="ARS">$ (Pesos)</option>
+      <option value="USD">U$D (Dólares)</option>
+    </select>
+
+    <label for="concept">Concepto</label>
+    <input type="text" id="concept" placeholder="Ejemplo: Compra supermercado" required />
+
+    <label for="amount">Monto</label>
+    <input type="number" id="amount" placeholder="Ejemplo: 1500" required />
+
+    <label for="type">Tipo</label>
+    <select id="type" required>
+      <option value="income">Ingreso</option>
+      <option value="expense">Gasto</option>
+    </select>
+
+    <button type="submit">Añadir Movimiento</button>
+  </form>
+
+  <div class="totals">
+    <h3>Totales</h3>
+    <div>Efectivo: <span id="total-cash">$0</span></div>
+    <div>Transferencias: <span id="total-transfers">$0</span></div>
+  </div>
+
+  <div class="movements">
+    <h3>Movimientos</h3>
+    <pre id="movements-log">[]</pre>
+    <div class="download">
+      <button id="download-json">Descargar JSON</button>
+    </div>
+    <div class="upload">
+      <label for="upload-json">Importar JSON</label>
+      <input type="file" id="upload-json" accept="application/json" />
+    </div>
+  </div>
+
+  <script>
+    // Inicializar array de movimientos
+    let movements = [];
+
+    // Referencias a elementos del DOM
+    const form = document.getElementById("expense-form");
+    const paymentMethod = document.getElementById("payment-method");
+    const accountOptions = document.getElementById("account-options");
+    const account = document.getElementById("account");
+    const currency = document.getElementById("currency");
+    const concept = document.getElementById("concept");
+    const amount = document.getElementById("amount");
+    const type = document.getElementById("type");
+    const movementsLog = document.getElementById("movements-log");
+    const downloadJsonButton = document.getElementById("download-json");
+    const uploadJsonInput = document.getElementById("upload-json");
+    const totalCash = document.getElementById("total-cash");
+    const totalTransfers = document.getElementById("total-transfers");
+
+    // Totales
+    let totals = {
+      cash: 0,
+      transfers: 0,
+    };
+
+    // Mostrar/ocultar opciones de cuenta según método de pago
+    paymentMethod.addEventListener("change", () => {
+      if (paymentMethod.value === "transfer") {
+        accountOptions.classList.remove("hidden");
+      } else {
+        accountOptions.classList.add("hidden");
+      }
+    });
+
+    // Manejar envío del formulario
+    form.addEventListener("submit", (e) => {
+      e.preventDefault(); // Prevenir recarga de la página
+
+      // Crear un objeto para el movimiento
+      const movement = {
+        method: paymentMethod.value,
+        account: paymentMethod.value === "transfer" ? account.value : null,
+        currency: currency.value,
+        concept: concept.value,
+        amount: parseFloat(amount.value),
+        type: type.value,
+        date: new Date().toISOString(),
+      };
+
+      // Añadir movimiento al array
+      movements.push(movement);
+
+      // Actualizar totales
+      updateTotals(movement);
+
+      // Actualizar el log visual
+      updateMovementsLog();
+
+      // Limpiar el formulario
+      form.reset();
+      accountOptions.classList.add("hidden");
+    });
+
+    // Actualizar totales
+    function updateTotals(movement) {
+      const multiplier = movement.type === "income" ? 1 : -1;
+      const amount = movement.amount * multiplier;
+
+      if (movement.method === "cash") {
+        totals.cash += amount;
+      } else {
+        totals.transfers += amount;
+      }
+
+      // Actualizar elementos en el DOM
+      totalCash.textContent = `${movement.currency} ${totals.cash.toFixed(2)}`;
+      totalTransfers.textContent = `${movement.currency} ${totals.transfers.toFixed(2)}`;
+    }
+
+    // Actualizar log de movimientos
+    function updateMovementsLog() {
+      movementsLog.textContent = JSON.stringify(movements, null, 2);
+    }
+
+    // Descargar datos en formato JSON
+    downloadJsonButton.addEventListener("click", () => {
+      const jsonData = JSON.stringify(movements, null, 2);
+      const blob = new Blob([jsonData], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      // Crear enlace para descargar
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "movements.json"; // Nombre del archivo
+      document.body.appendChild(a);
+      a.click();
+
+      // Eliminar el enlace después de descargar
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // Importar datos desde un archivo JSON
+    uploadJsonInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const importedMovements = JSON.parse(e.target.result);
+
+            // Validar estructura del JSON
+            if (Array.isArray(importedMovements)) {
+              importedMovements.forEach((movement) => {
+                movements.push(movement);
+                updateTotals(movement);
+              });
+              updateMovementsLog();
+              alert("Movimientos importados exitosamente.");
+            } else {
+              alert("El archivo no tiene el formato correcto.");
+            }
+          } catch (error) {
+            alert("Error al leer el archivo JSON.");
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+  </script>
+</body>
+</html>
